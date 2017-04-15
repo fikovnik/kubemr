@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/onrik/logrus/filename"
@@ -19,6 +20,13 @@ import (
 
 var config *rest.Config
 var defaultreplica int32 = 1
+
+const (
+	//StatusFail when job fails
+	StatusFail = "FAIL"
+	//StatusPending when job has been validated, but DS has not been created
+	StatusPending = "PENDING"
+)
 
 func init() {
 	log.SetFormatter(&log.JSONFormatter{})
@@ -67,6 +75,7 @@ func (s *JobSpec) UnmarshalJSON(b []byte) error {
 		if s.spec.Replicas == nil {
 			s.spec.Replicas = &defaultreplica
 		}
+		//TODO: Do some validations... if fail populate error and make spec nil
 	}
 	return nil
 }
@@ -101,67 +110,106 @@ func ensureTprExists(cl *kubernetes.Clientset) {
 	log.Info(tpr)
 }
 
-//managejob loops thru TPR objects and adjusts status, deploy workers, etc
-func managejob(cl *kubernetes.Clientset) {
-	tprconfig, err := rest.InClusterConfig()
-	if err != nil {
-		log.Fatal(err)
-	}
+type jobmanager struct {
+	cl        *kubernetes.Clientset
+	tprclient *rest.RESTClient
+}
 
+func newjobmanager(config *rest.Config, cl *kubernetes.Clientset) (*jobmanager, error) {
+	j := &jobmanager{
+		cl: cl,
+	}
 	groupversion := schema.GroupVersion{
 		Group:   "turbobytes.com",
 		Version: "v1alpha1",
 	}
-	tprconfig.APIPath = "/apis"
-	tprconfig.GroupVersion = &groupversion
-	tprconfig.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: api.Codecs}
+	config.APIPath = "/apis"
+	config.GroupVersion = &groupversion
+	config.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: api.Codecs}
 
-	tprclient, err := rest.RESTClientFor(tprconfig)
+	tprclient, err := rest.RESTClientFor(config)
 	if err != nil {
-		log.Fatal(err)
+		return nil, err
 	}
-	req := tprclient.Get().Resource("mapreducejobs")
+	j.tprclient = tprclient
+	return j, nil
+}
+
+func (j *jobmanager) jobloop() error {
+	for {
+		err := j.jobloopSingle()
+		if err != nil {
+			//TODO: Return error if something critical happens
+			log.Error(err)
+		}
+		time.Sleep(time.Second * 15)
+	}
+}
+
+func (j *jobmanager) jobloopSingle() error {
+	req := j.tprclient.Get().Resource("mapreducejobs")
 	log.Info(req.URL())
 	jobList := MapReduceJobList{}
 
 	b, err := req.DoRaw()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	err = json.Unmarshal(b, &jobList)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	for _, job := range jobList.Items {
-		log.Info(job.Name)
-		if job.Spec.spec == nil {
-			log.Info("spec is nil")
-			//Update the TPR
-			if job.Status == "" {
-				job.Status = "FAIL"
-				if job.Spec.err != nil {
-					job.Err = job.Spec.err.Error()
-				} else {
-					job.Err = "Spec is required"
-				}
-				b, err := json.Marshal(job)
-				if err != nil {
-					log.Error(err)
-				} else {
-					req = tprclient.Patch(types.MergePatchType).Resource("mapreducejobs").Namespace(job.Namespace).Name(job.Name).Body(b)
-					log.Info(req.URL())
-					b, err = req.DoRaw()
-					if err != nil {
-						log.Error(err)
-					}
-					log.Info(string(b))
-				}
-			}
-		} else {
-			log.Info(job.Spec.spec)
-		}
-
+		j.process(job)
 	}
+	return nil
+}
+
+func (j *jobmanager) process(job MapReduceJob) error {
+	switch job.Status {
+	case "":
+		return j.checkspec(job)
+	}
+	return nil
+}
+
+func (j *jobmanager) checkspec(job MapReduceJob) error {
+	if job.Spec.spec == nil {
+		return j.specfail(job)
+	}
+	//Spec is ok, lets stamp pending
+	return j.patchjob(job, map[string]interface{}{"status": StatusPending})
+}
+
+func (j *jobmanager) specfail(job MapReduceJob) error {
+	if job.Status != StatusFail {
+		updateobj := make(map[string]interface{})
+		updateobj["status"] = StatusFail
+		if job.Spec.err != nil {
+			updateobj["err"] = job.Spec.err.Error()
+		} else {
+			updateobj["err"] = "Spec is required"
+		}
+		return j.patchjob(job, updateobj)
+	}
+	return nil
+}
+
+//Since we use patch with only the fields we wanna update,
+//it shouldnt cause issues if multiple operators are doing the same thing.
+func (j *jobmanager) patchjob(job MapReduceJob, update map[string]interface{}) error {
+	b, err := json.Marshal(update)
+	if err != nil {
+		return err
+	}
+	req := j.tprclient.Patch(types.MergePatchType).Resource("mapreducejobs").Namespace(job.Namespace).Name(job.Name).Body(b)
+	log.Info(req.URL())
+	b, err = req.DoRaw()
+	if err != nil {
+		log.Info(string(b))
+		return err
+	}
+	return nil
 }
 
 func main() {
@@ -178,5 +226,13 @@ func main() {
 		log.Fatal(err)
 	}
 	ensureTprExists(clientset)
-	managejob(clientset)
+	j, err := newjobmanager(config, clientset)
+	if err != nil {
+		log.Fatal(err)
+	}
+	err = j.jobloop()
+	if err != nil {
+		log.Fatal(err)
+	}
+	//managejob(clientset)
 }
