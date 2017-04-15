@@ -1,0 +1,23 @@
+package: github.com/turbobytes/kubemr
+import:
+- package: github.com/Sirupsen/logrus
+- package: github.com/onrik/logrus
+  subpackages:
+  - filename
+- package: k8s.io/apimachinery
+  subpackages:
+  - pkg/apis/meta/v1
+  - pkg/runtime/schema
+  - pkg/runtime/serializer
+  - pkg/types
+- package: k8s.io/client-go
+  subpackages:
+  - kubernetes
+  - pkg/api/v1
+  - pkg/apis/extensions/v1beta1
+  - rest
+  - pkg/api
+- package: k8s.io/kubernetes
+  subpackages:
+  - pkg/runtime
+  - pkg/api/unversioned
