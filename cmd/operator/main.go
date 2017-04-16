@@ -2,90 +2,34 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/onrik/logrus/filename"
+	"github.com/turbobytes/kubemr/pkg/job"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/v1"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 	"k8s.io/client-go/rest"
-	"k8s.io/kubernetes/pkg/api/unversioned"
+	"k8s.io/client-go/tools/clientcmd"
 )
 
-var config *rest.Config
-var defaultreplica int32 = 1
-
-const (
-	//StatusFail when job fails
-	StatusFail = "FAIL"
-	//StatusPending when job has been validated, but DS has not been created
-	StatusPending = "PENDING"
+var (
+	kubeconfig *string
 )
 
 func init() {
+	//Set this for testing purposes... in prod this would always be in-cluster
+	kubeconfig = flag.String("kubeconfig", "", "path to kubeconfig, if absent then we use rest.InClusterConfig()")
+	flag.Parse()
 	log.SetFormatter(&log.JSONFormatter{})
 	filenameHook := filename.NewHook()
 	log.AddHook(filenameHook)
-}
-
-//MapReduceJobList is result of rest api call
-type MapReduceJobList struct {
-	unversioned.TypeMeta `json:",inline"`
-	unversioned.ListMeta `json:"metadata,omitempty"`
-	Items                []MapReduceJob `json:"items"`
-}
-
-// MapReduceJob defines TPR object for a map-reduce job
-type MapReduceJob struct {
-	metav1.TypeMeta `json:",inline"`
-	v1.ObjectMeta   `json:"metadata,omitempty"`
-	Spec            JobSpec `json:"spec"`
-	Status          string  `json:"status"`
-	Err             string  `json:"error"`
-}
-
-//JobSpec is the job specification outer container
-type JobSpec struct {
-	spec *jobspec
-	err  error
-}
-
-//Doing this as workaround to silently fail
-type jobspec struct {
-	Template v1.PodTemplateSpec `json:"template" protobuf:"bytes,3,opt,name=template"`
-	Replicas *int32             `json:"replicas,omitempty" protobuf:"varint,1,opt,name=replicas"`
-	KeepTmp  bool               `json:"keeptmp"` //Keep intermediate stage files
-	//TODO
-}
-
-//UnmarshalJSON silently fails on error
-func (s *JobSpec) UnmarshalJSON(b []byte) error {
-	s.spec = &jobspec{}
-	s.err = json.Unmarshal(b, s.spec)
-	if s.err != nil {
-		//Silent fail...
-		s.spec = nil
-	} else {
-		if s.spec.Replicas == nil {
-			s.spec.Replicas = &defaultreplica
-		}
-		//TODO: Do some validations... if fail populate error and make spec nil
-	}
-	return nil
-}
-
-//MarshalJSON packs job
-func (s *JobSpec) MarshalJSON() ([]byte, error) {
-	if s.spec == nil {
-		return nil, nil
-	}
-	return json.Marshal(s.spec)
 }
 
 func ensureTprExists(cl *kubernetes.Clientset) {
@@ -149,7 +93,7 @@ func (j *jobmanager) jobloop() error {
 func (j *jobmanager) jobloopSingle() error {
 	req := j.tprclient.Get().Resource("mapreducejobs")
 	log.Info(req.URL())
-	jobList := MapReduceJobList{}
+	jobList := job.MapReduceJobList{}
 
 	b, err := req.DoRaw()
 	if err != nil {
@@ -159,50 +103,54 @@ func (j *jobmanager) jobloopSingle() error {
 	if err != nil {
 		return err
 	}
-	for _, job := range jobList.Items {
-		j.process(job)
-	}
-	return nil
-}
-
-func (j *jobmanager) process(job MapReduceJob) error {
-	switch job.Status {
-	case "":
-		return j.checkspec(job)
-	}
-	return nil
-}
-
-func (j *jobmanager) checkspec(job MapReduceJob) error {
-	if job.Spec.spec == nil {
-		return j.specfail(job)
-	}
-	//Spec is ok, lets stamp pending
-	return j.patchjob(job, map[string]interface{}{"status": StatusPending})
-}
-
-func (j *jobmanager) specfail(job MapReduceJob) error {
-	if job.Status != StatusFail {
-		updateobj := make(map[string]interface{})
-		updateobj["status"] = StatusFail
-		if job.Spec.err != nil {
-			updateobj["err"] = job.Spec.err.Error()
-		} else {
-			updateobj["err"] = "Spec is required"
+	for _, jb := range jobList.Items {
+		err = j.process(jb)
+		if err != nil {
+			return err
 		}
-		return j.patchjob(job, updateobj)
+	}
+	return nil
+}
+
+func (j *jobmanager) process(jb job.MapReduceJob) error {
+	switch jb.Status {
+	case "":
+		return j.checkspec(jb)
+	}
+	return nil
+}
+
+func (j *jobmanager) checkspec(jb job.MapReduceJob) error {
+	err := jb.Spec.Validate()
+	if err != nil {
+		return j.specfail(jb, err)
+	}
+	return j.patchjob(jb, jb.Spec.PatchSpecPending())
+}
+
+func addPatchObj(path, v interface{}) map[string]interface{} {
+	return map[string]interface{}{"op": "add", "path": path, "value": v}
+}
+
+func (j *jobmanager) specfail(jb job.MapReduceJob, err error) error {
+	if jb.Status != job.StatusFail {
+		updateobj := make([]map[string]interface{}, 0)
+		//updateobj = append(updateobj, map[string]interface{}{"op": "test", "path": "/foo", "value": "bar"}) Note2self: This is how we might be able to get locks
+		updateobj = append(updateobj, addPatchObj("/status", job.StatusFail))
+		updateobj = append(updateobj, addPatchObj("/err", err.Error()))
+		return j.patchjob(jb, updateobj)
 	}
 	return nil
 }
 
 //Since we use patch with only the fields we wanna update,
 //it shouldnt cause issues if multiple operators are doing the same thing.
-func (j *jobmanager) patchjob(job MapReduceJob, update map[string]interface{}) error {
+func (j *jobmanager) patchjob(jb job.MapReduceJob, update []map[string]interface{}) error {
 	b, err := json.Marshal(update)
 	if err != nil {
 		return err
 	}
-	req := j.tprclient.Patch(types.MergePatchType).Resource("mapreducejobs").Namespace(job.Namespace).Name(job.Name).Body(b)
+	req := j.tprclient.Patch(types.JSONPatchType).Resource("mapreducejobs").Namespace(jb.Namespace).Name(jb.Name).Body(b)
 	log.Info(req.URL())
 	b, err = req.DoRaw()
 	if err != nil {
@@ -212,11 +160,17 @@ func (j *jobmanager) patchjob(job MapReduceJob, update map[string]interface{}) e
 	return nil
 }
 
+func getconfig() (*rest.Config, error) {
+	if *kubeconfig == "" {
+		return rest.InClusterConfig()
+	}
+	return clientcmd.BuildConfigFromFlags("", *kubeconfig)
+}
+
 func main() {
 	log.Info("Operator starting...")
 	// creates the in-cluster config
-	var err error
-	config, err = rest.InClusterConfig()
+	config, err := getconfig()
 	if err != nil {
 		log.Fatal(err)
 	}
