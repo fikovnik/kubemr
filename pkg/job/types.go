@@ -44,16 +44,18 @@ type Result struct {
 
 //ReduceTask holds the values for individual map task
 type ReduceTask struct {
-	Worker string   //Hostname, used for locking
-	Inputs []string //Multiple possible inputs for a reduce job
-	Output string   //Single output from reduce
+	Worker string   `json:"worker"` //Hostname, used for locking
+	Inputs []string `json:"inputs"` //Multiple possible inputs for a reduce job
+	Output string   `json:"output"` //Single output from reduce
+	Err    error    `json:"error"`
 }
 
 //MapTask holds the values for individual map task
 type MapTask struct {
-	Worker  string   //Hostname, used for locking
-	Input   string   //One input per map
-	Outputs []string //Multiple possible outputs
+	Worker  string   `json:"worker"`  //Hostname, used for locking
+	Input   string   `json:"input"`   //One input per map
+	Outputs []string `json:"outputs"` //Multiple possible outputs
+	Err     error    `json:"error"`
 }
 
 //Spec is the job specification outer container
