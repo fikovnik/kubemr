@@ -4,8 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/pkg/api/v1"
+	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/pkg/api/unversioned"
 )
 
 var (
@@ -21,21 +21,21 @@ const (
 
 //MapReduceJobList is result of rest api call
 type MapReduceJobList struct {
-	metav1.TypeMeta `json:",inline"`
-	metav1.ListMeta `json:"metadata,omitempty"`
-	Items           []MapReduceJob `json:"items"`
+	unversioned.TypeMeta `json:",inline"`
+	unversioned.ListMeta `json:"metadata,omitempty"`
+	Items                []MapReduceJob `json:"items"`
 }
 
 // MapReduceJob defines TPR object for a map-reduce job
 type MapReduceJob struct {
-	metav1.TypeMeta `json:",inline"`
-	v1.ObjectMeta   `json:"metadata,omitempty"`
-	Spec            Spec               `json:"spec"`
-	Status          string             `json:"status"`
-	Err             string             `json:"error"`
-	Maps            map[int]MapTask    `json:"maps"`
-	Reduces         map[int]ReduceTask `json:"reduces"`
-	Results         []Result           `json:"results"`
+	unversioned.TypeMeta `json:",inline"`
+	api.ObjectMeta       `json:"metadata,omitempty"`
+	Spec                 Spec               `json:"spec"`
+	Status               string             `json:"status"`
+	Err                  string             `json:"error"`
+	Maps                 map[int]MapTask    `json:"maps"`
+	Reduces              map[int]ReduceTask `json:"reduces"`
+	Results              []Result           `json:"results"`
 }
 
 //Result describes the final result to be consumed by the user

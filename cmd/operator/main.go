@@ -8,13 +8,12 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/onrik/logrus/filename"
 	"github.com/turbobytes/kubemr/pkg/job"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/api"
+	"k8s.io/client-go/pkg/api/unversioned"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
+	"k8s.io/client-go/pkg/runtime/serializer"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -27,13 +26,13 @@ func init() {
 	//Set this for testing purposes... in prod this would always be in-cluster
 	kubeconfig = flag.String("kubeconfig", "", "path to kubeconfig, if absent then we use rest.InClusterConfig()")
 	flag.Parse()
-	log.SetFormatter(&log.JSONFormatter{})
+	//log.SetFormatter(&log.JSONFormatter{})
 	filenameHook := filename.NewHook()
 	log.AddHook(filenameHook)
 }
 
 func ensureTprExists(cl *kubernetes.Clientset) {
-	tpr, err := cl.ExtensionsV1beta1().ThirdPartyResources().Get("map-reduce-job.turbobytes.com", metav1.GetOptions{})
+	tpr, err := cl.ExtensionsV1beta1().ThirdPartyResources().Get("map-reduce-job.turbobytes.com")
 	if err == nil {
 		log.Info("TPR exists")
 		return
@@ -57,18 +56,23 @@ func ensureTprExists(cl *kubernetes.Clientset) {
 type jobmanager struct {
 	cl        *kubernetes.Clientset
 	tprclient *rest.RESTClient
+	jobclient *job.Client
 }
 
 func newjobmanager(config *rest.Config, cl *kubernetes.Clientset) (*jobmanager, error) {
 	j := &jobmanager{
 		cl: cl,
 	}
-	groupversion := schema.GroupVersion{
+	groupversion := unversioned.GroupVersion{
 		Group:   "turbobytes.com",
 		Version: "v1alpha1",
 	}
 	config.APIPath = "/apis"
 	config.GroupVersion = &groupversion
+	dynclient, err := dynamic.NewClient(config)
+	if err != nil {
+		return nil, err
+	}
 	config.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: api.Codecs}
 
 	tprclient, err := rest.RESTClientFor(config)
@@ -76,6 +80,8 @@ func newjobmanager(config *rest.Config, cl *kubernetes.Clientset) (*jobmanager, 
 		return nil, err
 	}
 	j.tprclient = tprclient
+	j.jobclient = job.NewClient(dynclient)
+	log.Fatal(j.jobclient.WatchList())
 	return j, nil
 }
 
@@ -91,18 +97,11 @@ func (j *jobmanager) jobloop() error {
 }
 
 func (j *jobmanager) jobloopSingle() error {
-	req := j.tprclient.Get().Resource("mapreducejobs")
-	log.Info(req.URL())
-	jobList := job.MapReduceJobList{}
+	jobList, err := j.jobclient.List()
+	if err != nil {
+		return err
+	}
 
-	b, err := req.DoRaw()
-	if err != nil {
-		return err
-	}
-	err = json.Unmarshal(b, &jobList)
-	if err != nil {
-		return err
-	}
 	for _, jb := range jobList.Items {
 		err = j.process(jb)
 		if err != nil {
@@ -150,7 +149,7 @@ func (j *jobmanager) patchjob(jb job.MapReduceJob, update []map[string]interface
 	if err != nil {
 		return err
 	}
-	req := j.tprclient.Patch(types.JSONPatchType).Resource("mapreducejobs").Namespace(jb.Namespace).Name(jb.Name).Body(b)
+	req := j.tprclient.Patch(api.JSONPatchType).Resource("mapreducejobs").Namespace(jb.Namespace).Name(jb.Name).Body(b)
 	log.Info(req.URL())
 	b, err = req.DoRaw()
 	if err != nil {
