@@ -1,19 +1,15 @@
 package main
 
 import (
-	"encoding/json"
 	"flag"
-	"time"
 
 	log "github.com/Sirupsen/logrus"
 	"github.com/onrik/logrus/filename"
 	"github.com/turbobytes/kubemr/pkg/job"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/pkg/api/unversioned"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/pkg/runtime/serializer"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
@@ -54,15 +50,11 @@ func ensureTprExists(cl *kubernetes.Clientset) {
 }
 
 type jobmanager struct {
-	cl        *kubernetes.Clientset
-	tprclient *rest.RESTClient
 	jobclient *job.Client
 }
 
 func newjobmanager(config *rest.Config, cl *kubernetes.Clientset) (*jobmanager, error) {
-	j := &jobmanager{
-		cl: cl,
-	}
+	j := &jobmanager{}
 	groupversion := unversioned.GroupVersion{
 		Group:   "turbobytes.com",
 		Version: "v1alpha1",
@@ -73,90 +65,12 @@ func newjobmanager(config *rest.Config, cl *kubernetes.Clientset) (*jobmanager, 
 	if err != nil {
 		return nil, err
 	}
-	config.NegotiatedSerializer = serializer.DirectCodecFactory{CodecFactory: api.Codecs}
-
-	tprclient, err := rest.RESTClientFor(config)
-	if err != nil {
-		return nil, err
-	}
-	j.tprclient = tprclient
 	j.jobclient = job.NewClient(dynclient)
-	log.Fatal(j.jobclient.WatchList())
 	return j, nil
 }
 
 func (j *jobmanager) jobloop() error {
-	for {
-		err := j.jobloopSingle()
-		if err != nil {
-			//TODO: Return error if something critical happens
-			log.Error(err)
-		}
-		time.Sleep(time.Second * 15)
-	}
-}
-
-func (j *jobmanager) jobloopSingle() error {
-	jobList, err := j.jobclient.List()
-	if err != nil {
-		return err
-	}
-
-	for _, jb := range jobList.Items {
-		err = j.process(jb)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (j *jobmanager) process(jb job.MapReduceJob) error {
-	switch jb.Status {
-	case "":
-		return j.checkspec(jb)
-	}
-	return nil
-}
-
-func (j *jobmanager) checkspec(jb job.MapReduceJob) error {
-	err := jb.Spec.Validate()
-	if err != nil {
-		return j.specfail(jb, err)
-	}
-	return j.patchjob(jb, jb.Spec.PatchSpecPending())
-}
-
-func addPatchObj(path, v interface{}) map[string]interface{} {
-	return map[string]interface{}{"op": "add", "path": path, "value": v}
-}
-
-func (j *jobmanager) specfail(jb job.MapReduceJob, err error) error {
-	if jb.Status != job.StatusFail {
-		updateobj := make([]map[string]interface{}, 0)
-		//updateobj = append(updateobj, map[string]interface{}{"op": "test", "path": "/foo", "value": "bar"}) Note2self: This is how we might be able to get locks
-		updateobj = append(updateobj, addPatchObj("/status", job.StatusFail))
-		updateobj = append(updateobj, addPatchObj("/err", err.Error()))
-		return j.patchjob(jb, updateobj)
-	}
-	return nil
-}
-
-//Since we use patch with only the fields we wanna update,
-//it shouldnt cause issues if multiple operators are doing the same thing.
-func (j *jobmanager) patchjob(jb job.MapReduceJob, update []map[string]interface{}) error {
-	b, err := json.Marshal(update)
-	if err != nil {
-		return err
-	}
-	req := j.tprclient.Patch(api.JSONPatchType).Resource("mapreducejobs").Namespace(jb.Namespace).Name(jb.Name).Body(b)
-	log.Info(req.URL())
-	b, err = req.DoRaw()
-	if err != nil {
-		log.Info(string(b))
-		return err
-	}
-	return nil
+	return j.jobclient.WatchList()
 }
 
 func getconfig() (*rest.Config, error) {
