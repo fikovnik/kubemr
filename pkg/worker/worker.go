@@ -2,6 +2,6 @@ package worker
 
 //JobWorker is the user implimentation that performs the map/reduce tasks
 type JobWorker interface {
-	Map() func(input string, args map[string]string) (outputs []string, err error)
-	Reduce() func(inputs []string, args map[string]string) (output string, err error)
+	Map(id int, input string, args, secrets map[string]string, utils *Utilities) (outputs map[int]string, err error)
+	Reduce(id int, inputs []string, args, secrets map[string]string, utils *Utilities) (output string, err error)
 }

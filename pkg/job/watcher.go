@@ -37,17 +37,26 @@ func watchFilterer() func(watch.Event) (watch.Event, bool) {
 		// marshal the map into JSON, then unmarshal it back into a *Backup so that we can return
 		// it. If we fail anywhere, then indicate to the watch stream not to process this event.
 		// the consumer of the watch stream won't care about the event.
-		b, err := json.Marshal(unstruc.Object)
+		jb, err := UnstructToMapReduceJob(unstruc)
 		if err != nil {
-			log.Printf("Error marshaling %#v (%s)", in.Object, err)
-			return in, false
-		}
-		jb := new(MapReduceJob)
-		if err := json.Unmarshal(b, jb); err != nil {
-			log.Printf("Error unmarshaling %s (%s)", string(b), err)
 			return in, false
 		}
 		in.Object = jb
 		return in, true
 	}
+}
+
+//UnstructToMapReduceJob takes *runtime.Unstructured and marshals it into *MapReduceJob
+func UnstructToMapReduceJob(in *runtime.Unstructured) (*MapReduceJob, error) {
+	b, err := json.Marshal(in.Object)
+	if err != nil {
+		log.Printf("Error marshaling %#v (%s)", in.Object, err)
+		return nil, err
+	}
+	jb := new(MapReduceJob)
+	if err := json.Unmarshal(b, jb); err != nil {
+		log.Printf("Error unmarshaling %s (%s)", string(b), err)
+		return nil, err
+	}
+	return jb, nil
 }

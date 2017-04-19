@@ -1,0 +1,12 @@
+apiVersion: "turbobytes.com/v1alpha1"
+kind: MapReduceJob
+metadata:
+  #name: validobj1
+  generateName: test-
+spec:
+  image: turbobytes/kubemr-wordcount
+  replicas: 10
+  inputs:
+  - https://tools.ietf.org/rfc/rfc4501.txt
+  - https://tools.ietf.org/rfc/rfc2017.txt
+  - https://tools.ietf.org/rfc/rfc2425.txt

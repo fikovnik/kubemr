@@ -6,21 +6,21 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/onrik/logrus/filename"
 	"github.com/turbobytes/kubemr/pkg/job"
-	"k8s.io/client-go/dynamic"
+	k8s "github.com/turbobytes/kubemr/pkg/k8s.go"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api/unversioned"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 var (
-	kubeconfig *string
+	kubeconfig   = flag.String("kubeconfig", "", "path to kubeconfig, if absent then we use rest.InClusterConfig()")
+	s3region     = flag.String("s3region", "ap-southeast-1", "The S3 region we wanna use for temporary stuff")
+	bucketname   = flag.String("bucketname", "kubemr", "A pre-existing bucket")
+	bucketprefix = flag.String("bucketprefix", "", "Prepended to all keys, to reduce clutter in bucket root")
+	apiserver    = flag.String("apiserver", "", "Url to apiserver, blank to read from kubeconfig")
 )
 
 func init() {
 	//Set this for testing purposes... in prod this would always be in-cluster
-	kubeconfig = flag.String("kubeconfig", "", "path to kubeconfig, if absent then we use rest.InClusterConfig()")
 	flag.Parse()
 	//log.SetFormatter(&log.JSONFormatter{})
 	filenameHook := filename.NewHook()
@@ -46,44 +46,14 @@ func ensureTprExists(cl *kubernetes.Clientset) {
 	if err != nil {
 		log.Fatal(err)
 	}
+	//TODO: Wait for the TPR to be initialized
 	log.Info(tpr)
-}
-
-type jobmanager struct {
-	jobclient *job.Client
-}
-
-func newjobmanager(config *rest.Config, cl *kubernetes.Clientset) (*jobmanager, error) {
-	j := &jobmanager{}
-	groupversion := unversioned.GroupVersion{
-		Group:   "turbobytes.com",
-		Version: "v1alpha1",
-	}
-	config.APIPath = "/apis"
-	config.GroupVersion = &groupversion
-	dynclient, err := dynamic.NewClient(config)
-	if err != nil {
-		return nil, err
-	}
-	j.jobclient = job.NewClient(dynclient)
-	return j, nil
-}
-
-func (j *jobmanager) jobloop() error {
-	return j.jobclient.WatchList()
-}
-
-func getconfig() (*rest.Config, error) {
-	if *kubeconfig == "" {
-		return rest.InClusterConfig()
-	}
-	return clientcmd.BuildConfigFromFlags("", *kubeconfig)
 }
 
 func main() {
 	log.Info("Operator starting...")
 	// creates the in-cluster config
-	config, err := getconfig()
+	config, err := k8s.GetConfig(*apiserver, *kubeconfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -93,13 +63,14 @@ func main() {
 		log.Fatal(err)
 	}
 	ensureTprExists(clientset)
-	j, err := newjobmanager(config, clientset)
+	jobclient, err := job.NewClient(config, &job.Config{
+		S3Region:     *s3region,
+		BucketName:   *bucketname,
+		BucketPrefix: *bucketprefix,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = j.jobloop()
-	if err != nil {
-		log.Fatal(err)
-	}
+	log.Fatal(jobclient.WatchList())
 	//managejob(clientset)
 }

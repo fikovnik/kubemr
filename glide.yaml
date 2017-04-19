@@ -18,7 +18,7 @@ import:
   - pkg/apis/extensions/v1beta1
   - rest
   - pkg/api
-- package: k8s.io/kubernetes
+- package: gopkg.in/amz.v1
   subpackages:
-  - pkg/runtime
-  - pkg/api/unversioned
+  - aws
+- package: github.com/google/uuid

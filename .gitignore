@@ -26,3 +26,4 @@ _testmain.go
 vendor
 cmd/operator/bin
 cmd/apiserver/bin
+cmd/wordcount/bin

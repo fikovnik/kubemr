@@ -29,6 +29,8 @@ const (
 	StatusReduce = "REDUCE"
 	//StatusComplete when job has been processed successfully
 	StatusComplete = "COMPLETE"
+	//StatusProgress when job is in progress
+	StatusProgress = "PROGRESS"
 )
 
 //MapReduceJobList is result of rest api call
@@ -47,7 +49,12 @@ type MapReduceJob struct {
 	Err                  string             `json:"error"`
 	Maps                 map[int]MapTask    `json:"maps"`
 	Reduces              map[int]ReduceTask `json:"reduces"`
-	Results              []Result           `json:"results"`
+	Results              []string           `json:"results"`
+}
+
+//GetJobArgs returns job arguments
+func (jb *MapReduceJob) GetJobArgs() map[string]string {
+	return jb.Spec.spec.JobArgs
 }
 
 //initialize returns the patch specification for a new job discovered by operator
@@ -75,23 +82,24 @@ func (jb *MapReduceJob) specfail() jsonpatch.Patch {
 }
 
 //Result describes the final result to be consumed by the user
-type Result struct {
-}
+type Result string
 
 //ReduceTask holds the values for individual map task
 type ReduceTask struct {
 	Worker string   `json:"worker"` //Hostname, used for locking
 	Inputs []string `json:"inputs"` //Multiple possible inputs for a reduce job
 	Output string   `json:"output"` //Single output from reduce
-	Err    error    `json:"error"`
+	Err    string   `json:"error"`
+	Status string   `json:"status"`
 }
 
 //MapTask holds the values for individual map task
 type MapTask struct {
-	Worker  string   `json:"worker"`  //Hostname, used for locking
-	Input   string   `json:"input"`   //One input per map
-	Outputs []string `json:"outputs"` //Multiple possible outputs
-	Err     error    `json:"error"`
+	Worker  string         `json:"worker"`  //Hostname, used for locking
+	Input   string         `json:"input"`   //One input per map
+	Outputs map[int]string `json:"outputs"` //Multiple possible outputs
+	Err     string         `json:"error"`
+	Status  string         `json:"status"`
 }
 
 //Spec is the job specification outer container
