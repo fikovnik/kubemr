@@ -171,7 +171,8 @@ func init() {
 func main() {
 	runner, err := worker.NewRunner(*apiserver, *kubeconfig)
 	if err != nil {
-		log.Fatal(err)
+		log.Error(err)
+		return //Silent fail
 	}
 	log.Info(runner)
 

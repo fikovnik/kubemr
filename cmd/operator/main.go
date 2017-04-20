@@ -13,8 +13,8 @@ import (
 
 var (
 	kubeconfig   = flag.String("kubeconfig", "", "path to kubeconfig, if absent then we use rest.InClusterConfig()")
-	s3region     = flag.String("s3region", "ap-southeast-1", "The S3 region we wanna use for temporary stuff")
-	bucketname   = flag.String("bucketname", "kubemr", "A pre-existing bucket")
+	s3region     = flag.String("s3region", "", "The S3 region we wanna use for temporary stuff")
+	bucketname   = flag.String("bucketname", "", "A pre-existing bucket")
 	bucketprefix = flag.String("bucketprefix", "", "Prepended to all keys, to reduce clutter in bucket root")
 	apiserver    = flag.String("apiserver", "", "Url to apiserver, blank to read from kubeconfig")
 )
