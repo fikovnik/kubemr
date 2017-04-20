@@ -57,7 +57,7 @@ Above operation would fail if the `lockholder` already had a value. So multiple 
 
 Worker images are normal docker images that must have `CMD` or `ENTRYPOINT` defined. See [wordcount example](cmd/wordcount/) to see how the binary should be implemented.
 
-At the base level, all map/reduce inputs/outputs and results are strings. Helper functions are provided to upload/download these from S3.
+At the base level, all map/reduce inputs/outputs and results are strings. Helper functions are provided to upload/download these from S3. Your worker code can interpret this as anything - database table/keys, some other storage provider, shared filesystem, etc...
 
 ## Operator
 
