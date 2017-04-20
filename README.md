@@ -73,6 +73,8 @@ All resources for a MapReduceJob is created in the namespace the MapReduceJob is
 
 TODO: Not yet implemented
 
+I was thinking of making this an endpoint to read results from, but since the result can be arbitrary string, I am not sure how to handle this.
+
 ## Notes:-
 
 1. This is not robust code. Do not use in production.
@@ -81,3 +83,5 @@ TODO: Not yet implemented
 4. Currently I am not cleaning up after a job is finished. For testing deploy the `MapReduceJob` in a new namespace and delete that entire namespace when done.
 5. [2017-kubecon-eu](https://github.com/arschles/2017-KubeCon-EU) - Very helpful. I came across the talk after I started kubemr.
 6. Highly likely to have backwards-incompatible changes.
+7. I am not completely sure about atomic guarantees of using JSON patch on kubernetes apiserver.
+8. As of now, Kubernetes does not provide a way to enforce a particular schema to ThirdPartyResources. So if an invalid schema is submitted, operator will fail to validate the `MapReduceJob` and mark the status as `FAIL`.
