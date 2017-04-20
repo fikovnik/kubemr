@@ -6,7 +6,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/onrik/logrus/filename"
 	"github.com/turbobytes/kubemr/pkg/job"
-	k8s "github.com/turbobytes/kubemr/pkg/k8s.go"
+	"github.com/turbobytes/kubemr/pkg/k8s"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/pkg/apis/extensions/v1beta1"
 )
