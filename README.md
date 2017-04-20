@@ -36,13 +36,13 @@ If the status is `COMPLETE`, then look at the `results` list, fetch them somehow
 
 A few years ago I did a similar [PoC](https://github.com/turbobytes/gomr), using etcd for locking/consensus, and uploading/downloading worker binaries from S3.
 
-kubemr is similar, but we (ab)use Kubernetes [Third Party Resources](https://kubernetes.io/docs/concepts/ecosystem/thirdpartyresource/) for state, docker images for workers, and optionally S3 for storing stage outputs.
+kubemr is similar, but we (ab)use Kubernetes [Third Party Resources](https://kubernetes.io/docs/concepts/ecosystem/thirdpartyresource/) for state, docker images for workers, and optionally S3 for storing stage outputs. Currently it only supports Amazon S3, but should be trivial to support other S3-like services.
 
 ## State
 
 All state for a job is stored in a TPR. Originally we planned to use etcd for state, but we decided to use [JSON patch](http://jsonpatch.com/) functionality [provided by kubernetes](https://github.com/kubernetes/community/blob/master/contributors/devel/api-conventions.md#patch-operations) to make changes to this state. The `test` operation allows the patch to fail if some condition is not met.
 
-Example for locking using JSON patch
+Example lock using JSON patch :-
 
 ```
 [
@@ -50,6 +50,8 @@ Example for locking using JSON patch
   { "op": "add", "path": "/lockholder", "value": "me" },
 ]
 ```
+
+Above operation would fail if the `lockholder` already had a value. So multiple users might try to aquire the lock but only 1 would succeed.
 
 ## Worker images
 
@@ -59,8 +61,19 @@ At the base level, all map/reduce inputs/outputs and results are strings. Helper
 
 ## Operator
 
-The operator registers a TPR called `MapReduceJob` and deploys a kubernetes [Job](https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/) with the worker image specified. Once a Job is deployed, the workers manage the state. It should be safe to run multiple replicas of the operator. All resources for a MapReduceJob is created in the namespace the MapReduceJob is created in.
+The operator registers a TPR called `MapReduceJob` and deploys a kubernetes [Job](https://kubernetes.io/docs/concepts/workloads/controllers/jobs-run-to-completion/) with the worker image specified. Once a Job is deployed, the workers manage the state. It should be safe to run multiple replicas of the operator.
+
+All resources for a MapReduceJob is created in the namespace the MapReduceJob is created in.
 
 ## API server
 
 TODO: Not yet implemented
+
+## Notes:-
+
+1. This is not robust code. Do not use in production.
+2. Do not edit the `MapReduceJob` after creation unless you really know what you are doing.
+3. There is no failure retry.
+4. Currently I am not cleaning up after a job is finished. For testing deploy the `MapReduceJob` in a new namespace and delete that entire namespace when done.
+5. [2017-kubecon-eu](https://github.com/arschles/2017-KubeCon-EU) - Very helpful. I came across the talk after I started kubemr.
+6. Highly likely to have backwards-incompatible changes.
