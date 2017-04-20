@@ -11,7 +11,7 @@ import (
 	log "github.com/Sirupsen/logrus"
 	"github.com/turbobytes/kubemr/pkg/job"
 	"github.com/turbobytes/kubemr/pkg/jsonpatch"
-	k8s "github.com/turbobytes/kubemr/pkg/k8s.go"
+	"github.com/turbobytes/kubemr/pkg/k8s"
 )
 
 //Runner manages the lifecycle of a worker
