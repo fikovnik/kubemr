@@ -26,7 +26,11 @@ Create a job
 The output should look something like `mapreducejob "test-6vkjr" created` where `6vkjr` portion is dynamically generated.
 IMPORTANT: Do not edit the job once created or bad things might happen.
 
-Check on the jobs progress
+Watch all jobs
+
+    kubectl get mapreducejobs --all-namespaces -o=custom-columns=NAMESPACE:.metadata.namespace,NAME:.metadata.name,STATUS:.status -w
+
+Check on the particular jobs progress
 
     kubectl get mapreducejobs test-6vkjr -o json
 
