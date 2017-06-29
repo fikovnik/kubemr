@@ -157,10 +157,79 @@ func (cl *Client) Deploy(jb *MapReduceJob) error {
 	}
 	log.Infof("Aquired lock for %s/%s", jb.Namespace, jb.Name)
 	//We now hold the lock. Fingers cross everything goes fine...
-	//Init jobspec
-	//Begin big ugly thing
-	//TODO: Maybe move this as a yaml template... or not...
-	//Or maybe make the user write all this and we add kubemr specific things
+	//Take the pod template from jobspec and stamp kubemr specific things onto it
+
+	podspec := *jb.Spec.spec.Template
+	podspec.Spec.RestartPolicy = v1.RestartPolicyOnFailure
+
+	podenv := []v1.EnvVar{
+		//Name of job to run
+		v1.EnvVar{
+			Name:  "KUBEMR_JOB_NAME",
+			Value: jb.Name,
+		},
+		//Namespace of job. Perhaps we can use downward api
+		v1.EnvVar{
+			Name:  "KUBEMR_JOB_NAMESPACE",
+			Value: jb.Namespace,
+		},
+		//S3 region for intermediate files
+		v1.EnvVar{
+			Name: "KUBEMR_S3_REGION",
+			ValueFrom: &v1.EnvVarSource{
+				ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
+					Key:                  "s3region",
+				},
+			},
+		},
+		//S3 bucket name for intermediate files
+		v1.EnvVar{
+			Name: "KUBEMR_S3_BUCKET_NAME",
+			ValueFrom: &v1.EnvVarSource{
+				ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
+					Key:                  "bucketname",
+				},
+			},
+		},
+		//S3 key prefix for intermediate files
+		v1.EnvVar{
+			Name: "KUBEMR_S3_BUCKET_PREFIX",
+			ValueFrom: &v1.EnvVarSource{
+				ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
+					Key:                  "bucketprefix",
+				},
+			},
+		},
+		//S3 access id for intermediate files
+		v1.EnvVar{
+			Name: "KUBEMR_S3_ACCESS_KEY_ID",
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
+					Key:                  "S3_ACCESS_KEY_ID",
+				},
+			},
+		},
+		//S3 access secret for intermediate files
+		v1.EnvVar{
+			Name: "KUBEMR_S3_SECRET_ACCESS_KEY",
+			ValueFrom: &v1.EnvVarSource{
+				SecretKeyRef: &v1.SecretKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
+					Key:                  "S3_SECRET_ACCESS_KEY",
+				},
+			},
+		},
+	}
+
+	//Stamp our env to each container, unsure which one holds the job...
+	for i := range podspec.Spec.Containers {
+		podspec.Spec.Containers[i].Env = append(podspec.Spec.Containers[i].Env, podenv...)
+	}
+
 	jobspec := batchv1.Job{
 		//Metadata
 		ObjectMeta: v1.ObjectMeta{
@@ -171,112 +240,10 @@ func (cl *Client) Deploy(jb *MapReduceJob) error {
 		Spec: batchv1.JobSpec{
 			Parallelism: jb.Spec.spec.Replicas,
 			//Pod template
-			Template: v1.PodTemplateSpec{
-				Spec: v1.PodSpec{
-					Volumes: []v1.Volume{
-						//Create emptyDir{} for /tmp
-						v1.Volume{
-							Name:         "tmpdir",
-							VolumeSource: v1.VolumeSource{EmptyDir: &v1.EmptyDirVolumeSource{}},
-						},
-					},
-					RestartPolicy: v1.RestartPolicyOnFailure,
-					//Single container, must have docker ENTRYPOINT defined..
-					Containers: []v1.Container{
-						v1.Container{
-							Name:  "kubemrworker",
-							Image: jb.Spec.spec.Image,
-							Env: []v1.EnvVar{
-								//Name of job to run
-								v1.EnvVar{
-									Name:  "KUBEMR_JOB_NAME",
-									Value: jb.Name,
-								},
-								//Namespace of job. Perhaps we can use downward api
-								v1.EnvVar{
-									Name:  "KUBEMR_JOB_NAMESPACE",
-									Value: jb.Namespace,
-								},
-								//S3 region for intermediate files
-								v1.EnvVar{
-									Name: "KUBEMR_S3_REGION",
-									ValueFrom: &v1.EnvVarSource{
-										ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-											LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
-											Key:                  "s3region",
-										},
-									},
-								},
-								//S3 bucket name for intermediate files
-								v1.EnvVar{
-									Name: "KUBEMR_S3_BUCKET_NAME",
-									ValueFrom: &v1.EnvVarSource{
-										ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-											LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
-											Key:                  "bucketname",
-										},
-									},
-								},
-								//S3 key prefix for intermediate files
-								v1.EnvVar{
-									Name: "KUBEMR_S3_BUCKET_PREFIX",
-									ValueFrom: &v1.EnvVarSource{
-										ConfigMapKeyRef: &v1.ConfigMapKeySelector{
-											LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
-											Key:                  "bucketprefix",
-										},
-									},
-								},
-								//S3 access id for intermediate files
-								v1.EnvVar{
-									Name: "KUBEMR_S3_ACCESS_KEY_ID",
-									ValueFrom: &v1.EnvVarSource{
-										SecretKeyRef: &v1.SecretKeySelector{
-											LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
-											Key:                  "S3_ACCESS_KEY_ID",
-										},
-									},
-								},
-								//S3 access secret for intermediate files
-								v1.EnvVar{
-									Name: "KUBEMR_S3_SECRET_ACCESS_KEY",
-									ValueFrom: &v1.EnvVarSource{
-										SecretKeyRef: &v1.SecretKeySelector{
-											LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
-											Key:                  "S3_SECRET_ACCESS_KEY",
-										},
-									},
-								},
-							},
-							//Mount emptyDir{} into /tmp
-							VolumeMounts: []v1.VolumeMount{
-								v1.VolumeMount{
-									Name:      "tmpdir",
-									MountPath: "/tmp",
-								},
-							},
-						},
-					},
-				},
-			},
+			Template: podspec,
 		},
 	}
 
-	if jb.Spec.spec.UserSecretName != "" {
-		err = cl.CheckSecret(jb.Spec.spec.UserSecretName, jb.Namespace)
-		if err != nil {
-			log.Error(err)
-			updateobj = jsonpatch.New()
-			updateobj = updateobj.Add("replace", "/status", StatusFail)
-			updateobj = updateobj.Add("replace", "/err", err.Error())
-			return cl.PatchJob(jb.Name, jb.Namespace, updateobj)
-		}
-		//Pass secret name into job container
-		jobspec.Spec.Template.Spec.Containers[0].Env = append(jobspec.Spec.Template.Spec.Containers[0].Env, v1.EnvVar{
-			Name:  "KUBEMR_USER_SECRET",
-			Value: jb.Spec.spec.UserSecretName,
-		})
-	}
 	//Create kubemr secret in ns for this job
 	err = cl.EnsureSecretExists("kubemr", jb.Namespace)
 	if err != nil {

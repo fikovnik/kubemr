@@ -8,6 +8,7 @@ import (
 	"github.com/turbobytes/kubemr/pkg/jsonpatch"
 	"k8s.io/client-go/pkg/api"
 	"k8s.io/client-go/pkg/api/unversioned"
+	"k8s.io/client-go/pkg/api/v1"
 )
 
 var (
@@ -75,9 +76,9 @@ func (jb *MapReduceJob) initialize() jsonpatch.Patch {
 func (jb *MapReduceJob) specfail() jsonpatch.Patch {
 	updateobj := jsonpatch.New()
 	//Only proceed with specfail if status is nil because we are initializing here...
-	updateobj.Add("test", "/status", nil)
-	updateobj.Add("add", "/status", StatusFail)
-	updateobj.Add("add", "/err", jb.Spec.err.Error())
+	updateobj = updateobj.Add("test", "/status", nil)
+	updateobj = updateobj.Add("add", "/status", StatusFail)
+	updateobj = updateobj.Add("add", "/err", jb.Spec.err.Error())
 	return updateobj
 }
 
@@ -134,12 +135,13 @@ func (spec *Spec) PatchSpecPending() jsonpatch.Patch {
 
 //Doing this as workaround to silently fail
 type jobspec struct {
-	Image          string            `json:"image"`          //The image that runs the job
-	Replicas       *int32            `json:"replicas"`       //Number of workers to run in parallel
-	KeepTmp        bool              `json:"keeptmp"`        //Keep intermediate stage files
-	Inputs         []string          `json:"inputs"`         //List of initial inputs for the map phase
-	JobArgs        map[string]string `json:"jobargs"`        //Arbitary optional arguments which might make sense to user defined worker
-	UserSecretName string            `json:"usersecretname"` //Optional: Name of secret in job's namespace to be available to worker
+	Image    string            `json:"image"`    //The image that runs the job
+	Replicas *int32            `json:"replicas"` //Number of workers to run in parallel
+	KeepTmp  bool              `json:"keeptmp"`  //Keep intermediate stage files
+	Inputs   []string          `json:"inputs"`   //List of initial inputs for the map phase
+	JobArgs  map[string]string `json:"jobargs"`  //Arbitary optional arguments which might make sense to user defined worker
+	//UserSecretName string              `json:"usersecretname"` //Optional: Name of secret in job's namespace to be available to worker
+	Template *v1.PodTemplateSpec `json:"template"` //Pod template for the job
 	//TODO
 }
 
@@ -168,6 +170,9 @@ func (spec *jobspec) Validate() error {
 	}
 	if len(spec.Inputs) == 0 {
 		return fmt.Errorf("Atleast 1 input needed")
+	}
+	if spec.Template == nil {
+		return fmt.Errorf("Template is required")
 	}
 	if spec.Replicas == nil {
 		spec.Replicas = &defaultreplica

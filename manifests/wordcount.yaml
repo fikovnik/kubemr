@@ -10,3 +10,14 @@ spec:
   - https://tools.ietf.org/rfc/rfc4501.txt
   - https://tools.ietf.org/rfc/rfc2017.txt
   - https://tools.ietf.org/rfc/rfc2425.txt
+  template:
+    spec:
+      volumes:
+      - name: tmpdir
+        emptyDir: {}
+      containers:
+      - name: kubemrworker
+        image: turbobytes/kubemr-wordcount
+        volumeMounts:
+        - name: tmpdir
+          mountPath: /tmp
