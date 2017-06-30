@@ -17,6 +17,7 @@ var (
 	bucketname   = flag.String("bucketname", "", "A pre-existing bucket")
 	bucketprefix = flag.String("bucketprefix", "", "Prepended to all keys, to reduce clutter in bucket root")
 	apiserver    = flag.String("apiserver", "", "Url to apiserver, blank to read from kubeconfig")
+	s3endpoint   = flag.String("s3endpoint", "", "The S3 endpoint we wanna use for temporary stuff(overrides region)")
 )
 
 func init() {
@@ -65,6 +66,7 @@ func main() {
 	ensureTprExists(clientset)
 	jobclient, err := job.NewClient(config, &job.Config{
 		S3Region:     *s3region,
+		S3Endpoint:   *s3endpoint,
 		BucketName:   *bucketname,
 		BucketPrefix: *bucketprefix,
 	})

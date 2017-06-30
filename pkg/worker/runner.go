@@ -33,6 +33,7 @@ func NewRunner(apiserver, kubeconfig string) (*Runner, error) {
 	}
 	cfg := &job.Config{
 		S3Region:     os.Getenv("KUBEMR_S3_REGION"),
+		S3Endpoint:   os.Getenv("KUBEMR_S3_ENDPOINT"),
 		BucketName:   os.Getenv("KUBEMR_S3_BUCKET_NAME"),
 		BucketPrefix: os.Getenv("KUBEMR_S3_BUCKET_PREFIX"),
 	}
@@ -44,6 +45,9 @@ func NewRunner(apiserver, kubeconfig string) (*Runner, error) {
 	region, ok := aws.Regions[cfg.S3Region]
 	if !ok {
 		return nil, fmt.Errorf("Unable to load S3 region")
+	}
+	if cfg.S3Endpoint != "" {
+		region.S3Endpoint = cfg.S3Endpoint
 	}
 	s := s3.New(auth, region)
 
@@ -87,8 +91,13 @@ func NewRunner(apiserver, kubeconfig string) (*Runner, error) {
 		return nil, fmt.Errorf(r.job.Status)
 	}
 	prefix := os.Getenv("KUBEMR_S3_BUCKET_PREFIX") + "/" + r.job.Name + "/"
+
+	//Ensure bucket exists
+	bucket := s.Bucket(os.Getenv("KUBEMR_S3_BUCKET_NAME"))
+	//TODO: Check before attempting put. Maybe this should be done elsewhere
+	bucket.PutBucket("")
 	r.args = r.job.GetJobArgs()
-	r.utils = NewUtilities(s.Bucket(os.Getenv("KUBEMR_S3_BUCKET_NAME")), prefix)
+	r.utils = NewUtilities(bucket, prefix)
 	//TODO
 	return r, nil
 }

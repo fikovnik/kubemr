@@ -183,6 +183,16 @@ func (cl *Client) Deploy(jb *MapReduceJob) error {
 				},
 			},
 		},
+		//S3 region for intermediate files
+		v1.EnvVar{
+			Name: "KUBEMR_S3_ENDPOINT",
+			ValueFrom: &v1.EnvVarSource{
+				ConfigMapKeyRef: &v1.ConfigMapKeySelector{
+					LocalObjectReference: v1.LocalObjectReference{Name: "kubemr"},
+					Key:                  "s3endpoint",
+				},
+			},
+		},
 		//S3 bucket name for intermediate files
 		v1.EnvVar{
 			Name: "KUBEMR_S3_BUCKET_NAME",
