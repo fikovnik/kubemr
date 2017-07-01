@@ -192,7 +192,10 @@ func (r *Runner) work(w JobWorker) error {
 				time.Sleep(time.Second * 20) //To not spam the api server while waiting for turtle worker
 				return nil
 			}
-			results = append(results, v.Output)
+			if v.Output != "" {
+				//Blank output indicates no result, but successfull job
+				results = append(results, v.Output)
+			}
 		}
 		//TODO: Do a GC if requested by user
 		//Try and stamp this into the job...
