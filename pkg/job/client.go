@@ -2,8 +2,14 @@ package job
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"reflect"
+	"strings"
+	"sync"
+
+	"gopkg.in/amz.v1/aws"
+	"gopkg.in/amz.v1/s3"
 
 	log "github.com/sirupsen/logrus"
 	"github.com/turbobytes/kubemr/pkg/jsonpatch"
@@ -34,6 +40,7 @@ type Client struct {
 	clientset *kubernetes.Clientset
 	secrets   map[string]string //Holds secret data that both operator and worker needs to do its thing.
 	config    *Config           //Config for workers (and operator)
+	bucket    *s3.Bucket        //S3 bucket
 }
 
 //NewClient creates a new client
@@ -68,6 +75,24 @@ func NewClient(k8sconfig *rest.Config, config *Config) (*Client, error) {
 	cl.secrets = make(map[string]string)
 	cl.secrets["S3_ACCESS_KEY_ID"] = os.Getenv("KUBEMR_S3_ACCESS_KEY_ID")
 	cl.secrets["S3_SECRET_ACCESS_KEY"] = os.Getenv("KUBEMR_S3_SECRET_ACCESS_KEY")
+
+	//Prepare S3 bucket
+	auth := aws.Auth{
+		AccessKey: os.Getenv("KUBEMR_S3_ACCESS_KEY_ID"),
+		SecretKey: os.Getenv("KUBEMR_S3_SECRET_ACCESS_KEY"),
+	}
+
+	region, ok := aws.Regions[config.S3Region]
+	if !ok {
+		return nil, fmt.Errorf("Unable to load S3 region")
+	}
+	if config.S3Endpoint != "" {
+		region.S3Endpoint = config.S3Endpoint
+	}
+	s := s3.New(auth, region)
+	cl.bucket = s.Bucket(config.BucketName)
+	//Silently ignoring the Put for now
+	cl.bucket.PutBucket("") //Ensure bucket exists
 	return cl, nil
 }
 
@@ -185,12 +210,78 @@ func (cl *Client) clearjob(jb *MapReduceJob) error {
 			return err
 		}
 	}
-	//TODO: Delete S3 assets.. Maybe we do this in GC
+	//Delete S3 assets..
+	go cl.GC() //Trigger GC in goroutinue.
 	return err
 }
 
 //GC deletes old jobs, S3 files, pods, etc
-func (cl *Client) GC() {}
+func (cl *Client) GC() {
+	//Prepare list of existing jobs
+	jobs, err := cl.List()
+	if err != nil {
+		log.Infoln(err)
+		return
+	}
+	names := make(map[string]bool)
+	for _, jb := range jobs.Items {
+		names[jb.Name] = true
+	}
+	log.Info(names)
+	res, err := cl.bucket.List(cl.config.BucketPrefix, "/", "", 1000)
+	if err != nil {
+		log.Infoln(err)
+		return
+	}
+	for _, pre := range res.CommonPrefixes {
+		items := strings.Split(pre, "/")
+		jobname := items[len(items)-2]
+		if names[jobname] {
+			log.Infoln(pre, "Active job")
+		} else {
+			err = cl.clearS3(pre)
+			if err != nil {
+				log.Infoln(err)
+				return
+			}
+		}
+	}
+}
+
+//clearS3 all files with specified prefix
+func (cl *Client) clearS3(prefix string) error {
+	log.Infoln("Deleting S3", prefix)
+	res, err := cl.bucket.List(prefix, "", "", 1000)
+	if err != nil {
+		return err
+	}
+	log.Info(len(res.Contents))
+	var wg sync.WaitGroup
+	ch := make(chan string, 15)
+	//Start 10 worker goroutinues to delete in parallel
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for key := range ch {
+				err := cl.bucket.Del(key)
+				if err != nil {
+					log.Warn(err)
+				}
+			}
+		}()
+	}
+	for _, item := range res.Contents {
+		ch <- item.Key
+	}
+	close(ch)
+	wg.Wait()
+	if res.IsTruncated {
+		//Restart if there is more...
+		return cl.clearS3(prefix)
+	}
+	return nil
+}
 
 //Deploy allocates kubernetes objects
 func (cl *Client) Deploy(jb *MapReduceJob) error {

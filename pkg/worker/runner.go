@@ -97,7 +97,7 @@ func NewRunner(apiserver, kubeconfig string) (*Runner, error) {
 	//Ensure bucket exists
 	bucket := s.Bucket(os.Getenv("KUBEMR_S3_BUCKET_NAME"))
 	//TODO: Check before attempting put. Maybe this should be done elsewhere
-	bucket.PutBucket("")
+	//bucket.PutBucket("")
 	r.args = r.job.GetJobArgs()
 	r.utils = NewUtilities(bucket, prefix)
 	//TODO

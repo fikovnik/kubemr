@@ -75,6 +75,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	go jobclient.GC()
 	log.Fatal(jobclient.WatchList())
 	//managejob(clientset)
 }
