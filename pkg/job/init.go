@@ -1,8 +1,8 @@
 package job
 
 import (
-	log "github.com/Sirupsen/logrus"
 	"github.com/onrik/logrus/filename"
+	log "github.com/sirupsen/logrus"
 )
 
 //Init adds log filename hook

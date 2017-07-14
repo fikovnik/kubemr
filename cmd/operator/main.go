@@ -3,8 +3,10 @@ package main
 import (
 	"flag"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/onrik/logrus/filename"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	log "github.com/sirupsen/logrus"
 	"github.com/turbobytes/kubemr/pkg/job"
 	"github.com/turbobytes/kubemr/pkg/k8s"
 	"k8s.io/client-go/kubernetes"
@@ -29,7 +31,7 @@ func init() {
 }
 
 func ensureTprExists(cl *kubernetes.Clientset) {
-	tpr, err := cl.ExtensionsV1beta1().ThirdPartyResources().Get("map-reduce-job.turbobytes.com")
+	tpr, err := cl.ExtensionsV1beta1().ThirdPartyResources().Get("map-reduce-job.turbobytes.com", metav1.GetOptions{})
 	if err == nil {
 		log.Info("TPR exists")
 		return
@@ -37,7 +39,7 @@ func ensureTprExists(cl *kubernetes.Clientset) {
 	//Create TPR
 	tpr = &v1beta1.ThirdPartyResource{
 		Description: "Map reduce job specification",
-		Versions:    []v1beta1.APIVersion{v1beta1.APIVersion{Name: "v1alpha1"}},
+		Versions:    []v1beta1.APIVersion{v1beta1.APIVersion{Name: "v1beta1"}},
 	}
 	tpr.Kind = "ThirdPartyResource"
 	tpr.APIVersion = "extensions/v1beta1"

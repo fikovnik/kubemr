@@ -5,20 +5,22 @@ import (
 	"os"
 	"reflect"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/turbobytes/kubemr/pkg/jsonpatch"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime/schema"
+	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/unversioned"
 	"k8s.io/client-go/pkg/api/v1"
 	batchv1 "k8s.io/client-go/pkg/apis/batch/v1"
-	"k8s.io/client-go/pkg/watch"
 	"k8s.io/client-go/rest"
 )
 
 var (
-	jobResource = &unversioned.APIResource{
+	jobResource = &metav1.APIResource{
 		Name:       "mapreducejobs",
 		Namespaced: true,
 		Kind:       "MapReduceJobs",
@@ -42,9 +44,9 @@ func NewClient(k8sconfig *rest.Config, config *Config) (*Client, error) {
 		return nil, err
 	}
 	//Update config for tprclient
-	groupversion := unversioned.GroupVersion{
+	groupversion := schema.GroupVersion{
 		Group:   "turbobytes.com",
-		Version: "v1alpha1",
+		Version: "v1beta1",
 	}
 	k8sconfig.APIPath = "/apis"
 	k8sconfig.GroupVersion = &groupversion
@@ -79,10 +81,26 @@ func (cl *Client) Get(name, ns string) (*MapReduceJob, error) {
 	return UnstructToMapReduceJob(got)
 }
 
+//Delete a MapReduceJob by name
+func (cl *Client) Delete(name, ns string) error {
+	rescl := cl.tprclient.Resource(jobResource, ns)
+	return rescl.Delete(name, &metav1.DeleteOptions{})
+}
+
+//Create a new mapreduce job
+func (cl *Client) Create(ns string, task map[string]interface{}) (*MapReduceJob, error) {
+	in := &unstructured.Unstructured{Object: task}
+	got, err := cl.tprclient.Resource(jobResource, ns).Create(in)
+	if err != nil {
+		return nil, err
+	}
+	return UnstructToMapReduceJob(got)
+}
+
 //List all jobs
 func (cl *Client) List() (MapReduceJobList, error) {
 	jobList := MapReduceJobList{}
-	in, err := cl.jobclient.List(nil)
+	in, err := cl.jobclient.List(metav1.ListOptions{})
 	if err != nil {
 		log.Info(err)
 		return jobList, err
@@ -138,11 +156,41 @@ func (cl *Client) WatchList() error {
 				}
 				//TODO: check/update progress/etc
 			case watch.Deleted:
-				//TODO: clear resources associated with it
+				//clear resources associated with it
+				err := cl.clearjob(jb)
+				if err != nil {
+					log.Error(err)
+				}
 			}
 		}
 	}
 }
+
+//clearjob deletes the job
+func (cl *Client) clearjob(jb *MapReduceJob) error {
+	//Delete the associated Job data in S3
+	policy := metav1.DeletePropagationForeground
+	err := cl.clientset.BatchV1().Jobs(jb.Namespace).Delete(jb.Name, &metav1.DeleteOptions{PropagationPolicy: &policy})
+	if err != nil {
+		return err
+	}
+	//Delete pods
+	pods, err := cl.clientset.CoreV1().Pods(jb.Namespace).List(metav1.ListOptions{LabelSelector: "job-name=" + jb.Name})
+	if err != nil {
+		return err
+	}
+	for _, pod := range pods.Items {
+		err = cl.clientset.CoreV1().Pods(jb.Namespace).Delete(pod.Name, &metav1.DeleteOptions{})
+		if err != nil {
+			return err
+		}
+	}
+	//TODO: Delete S3 assets.. Maybe we do this in GC
+	return err
+}
+
+//GC deletes old jobs, S3 files, pods, etc
+func (cl *Client) GC() {}
 
 //Deploy allocates kubernetes objects
 func (cl *Client) Deploy(jb *MapReduceJob) error {
@@ -242,7 +290,7 @@ func (cl *Client) Deploy(jb *MapReduceJob) error {
 
 	jobspec := batchv1.Job{
 		//Metadata
-		ObjectMeta: v1.ObjectMeta{
+		ObjectMeta: metav1.ObjectMeta{
 			Name:      jb.Name,
 			Namespace: jb.Namespace,
 		},
@@ -298,7 +346,7 @@ func (cl *Client) DeployJob(jobspec *batchv1.Job) error {
 // EnsureConfigMapExists ensures config map exists
 func (cl *Client) EnsureConfigMapExists(name, ns string) error {
 	config := cl.config.Map()
-	cfg, err := cl.clientset.CoreV1().ConfigMaps(ns).Get(name)
+	cfg, err := cl.clientset.CoreV1().ConfigMaps(ns).Get(name, metav1.GetOptions{})
 	if err == nil {
 		if reflect.DeepEqual(config, cfg.Data) {
 			log.Info("configmap is fine...")
@@ -334,7 +382,7 @@ func (cl *Client) EnsureSecretExists(name, ns string) error {
 	for k, v := range cl.secrets {
 		secret[k] = []byte(v)
 	}
-	s, err := cl.clientset.CoreV1().Secrets(ns).Get(name)
+	s, err := cl.clientset.CoreV1().Secrets(ns).Get(name, metav1.GetOptions{})
 	if err == nil {
 		if reflect.DeepEqual(secret, s.Data) {
 			log.Info("secret is fine...")
@@ -367,14 +415,14 @@ func (cl *Client) CreateSecret(name, ns string, secret map[string][]byte) error 
 //CheckSecret checks if secret is present
 func (cl *Client) CheckSecret(name, ns string) error {
 	//TODO
-	_, err := cl.clientset.CoreV1().Secrets(ns).Get(name)
+	_, err := cl.clientset.CoreV1().Secrets(ns).Get(name, metav1.GetOptions{})
 	return err
 }
 
 //GetSecretData gets plaintext secret data
 func (cl *Client) GetSecretData(name, ns string) (map[string]string, error) {
 	//TODO
-	s, err := cl.clientset.CoreV1().Secrets(ns).Get(name)
+	s, err := cl.clientset.CoreV1().Secrets(ns).Get(name, metav1.GetOptions{})
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +444,8 @@ func (cl *Client) PatchJob(name, ns string, patchObj jsonpatch.Patch) error {
 	if err != nil {
 		return err
 	}
-	res, err := rescl.Patch(name, api.JSONPatchType, b)
+	log.Info(string(b))
+	res, err := rescl.Patch(name, types.JSONPatchType, b)
 	if err != nil {
 		log.Info(res)
 		return err

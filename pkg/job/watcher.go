@@ -3,17 +3,18 @@ package job
 import (
 	"encoding/json"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/watch"
 	"k8s.io/client-go/dynamic"
-	"k8s.io/client-go/pkg/runtime"
-	"k8s.io/client-go/pkg/watch"
 )
 
 // NewJobWatcher returns a function that watches all Backup TPRs in a given namespace
 func NewJobWatcher(cl *dynamic.ResourceClient) func() (watch.Interface, error) {
 	return func() (watch.Interface, error) {
 		// watching for Jobs
-		iface, err := cl.Watch(&MapReduceJob{})
+		iface, err := cl.Watch(metav1.ListOptions{})
 		if err != nil {
 			return nil, err
 		}
@@ -29,7 +30,7 @@ func watchFilterer() func(watch.Event) (watch.Event, bool) {
 	return func(in watch.Event) (watch.Event, bool) {
 		// event objects for TPRs come in as *runtime.Unstructured - a 'bucket' of unknown bytes
 		// that Kubernetes converts to a map[string]interface{} for us
-		unstruc, ok := in.Object.(*runtime.Unstructured)
+		unstruc, ok := in.Object.(*unstructured.Unstructured)
 		if !ok {
 			log.Printf("Not an unstructured")
 			return in, false
@@ -47,7 +48,7 @@ func watchFilterer() func(watch.Event) (watch.Event, bool) {
 }
 
 //UnstructToMapReduceJob takes *runtime.Unstructured and marshals it into *MapReduceJob
-func UnstructToMapReduceJob(in *runtime.Unstructured) (*MapReduceJob, error) {
+func UnstructToMapReduceJob(in *unstructured.Unstructured) (*MapReduceJob, error) {
 	b, err := json.Marshal(in.Object)
 	if err != nil {
 		log.Printf("Error marshaling %#v (%s)", in.Object, err)

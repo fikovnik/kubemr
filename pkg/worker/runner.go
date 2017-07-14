@@ -8,7 +8,7 @@ import (
 	"gopkg.in/amz.v1/aws"
 	"gopkg.in/amz.v1/s3"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/turbobytes/kubemr/pkg/job"
 	"github.com/turbobytes/kubemr/pkg/jsonpatch"
 	"github.com/turbobytes/kubemr/pkg/k8s"
@@ -86,7 +86,9 @@ func NewRunner(apiserver, kubeconfig string) (*Runner, error) {
 	case job.StatusPending:
 		fallthrough
 	case job.StatusDeploying:
-		fallthrough
+		//Wait few secs and retry. Maybe we need to limit number of retries
+		time.Sleep(time.Second * 10)
+		return NewRunner(apiserver, kubeconfig)
 	case job.StatusComplete:
 		return nil, fmt.Errorf(r.job.Status)
 	}
@@ -241,7 +243,18 @@ func (r *Runner) runReduce(w JobWorker, id int) error {
 		return err
 	}
 	//OK success!
-	return r.cl.PatchJob(r.name, r.ns, jsonpatch.New().Add("replace", fmt.Sprintf("/reduces/%v/output", id), output).Add("add", fmt.Sprintf("/reduces/%v/status", id), job.StatusComplete))
+	for i := 0; i < 10; i++ {
+		err = r.cl.PatchJob(r.name, r.ns, jsonpatch.New().Add("replace", fmt.Sprintf("/reduces/%v/output", id), output).Add("add", fmt.Sprintf("/reduces/%v/status", id), job.StatusComplete))
+		if err != nil {
+			log.Warn(err)
+			log.Info("Retrying", i)
+			time.Sleep(time.Second * time.Duration(i) * 2)
+		} else {
+			return nil
+		}
+	}
+
+	return err
 }
 
 func (r *Runner) runMap(w JobWorker, id int) error {
@@ -271,6 +284,17 @@ func (r *Runner) runMap(w JobWorker, id int) error {
 		return err
 	}
 	//OK success!
-	err = r.cl.PatchJob(r.name, r.ns, jsonpatch.New().Add("add", fmt.Sprintf("/maps/%v/outputs", id), outputs).Add("add", fmt.Sprintf("/maps/%v/status", id), job.StatusComplete))
+
+	//OK success!
+	for i := 0; i < 10; i++ {
+		err = r.cl.PatchJob(r.name, r.ns, jsonpatch.New().Add("add", fmt.Sprintf("/maps/%v/outputs", id), outputs).Add("add", fmt.Sprintf("/maps/%v/status", id), job.StatusComplete))
+		if err != nil {
+			log.Warn(err)
+			log.Info("Retrying", i)
+			time.Sleep(time.Second * time.Duration(i) * 2)
+		} else {
+			return nil
+		}
+	}
 	return err
 }

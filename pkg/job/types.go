@@ -4,10 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	log "github.com/Sirupsen/logrus"
+	log "github.com/sirupsen/logrus"
 	"github.com/turbobytes/kubemr/pkg/jsonpatch"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/pkg/api"
-	"k8s.io/client-go/pkg/api/unversioned"
 	"k8s.io/client-go/pkg/api/v1"
 )
 
@@ -36,21 +36,21 @@ const (
 
 //MapReduceJobList is result of rest api call
 type MapReduceJobList struct {
-	unversioned.TypeMeta `json:",inline"`
-	unversioned.ListMeta `json:"metadata,omitempty"`
-	Items                []MapReduceJob `json:"items"`
+	metav1.TypeMeta `json:",inline"`
+	metav1.ListMeta `json:"metadata,omitempty"`
+	Items           []MapReduceJob `json:"items"`
 }
 
 // MapReduceJob defines TPR object for a map-reduce job
 type MapReduceJob struct {
-	unversioned.TypeMeta `json:",inline"`
-	api.ObjectMeta       `json:"metadata,omitempty"`
-	Spec                 Spec               `json:"spec"`
-	Status               string             `json:"status"`
-	Err                  string             `json:"error"`
-	Maps                 map[int]MapTask    `json:"maps"`
-	Reduces              map[int]ReduceTask `json:"reduces"`
-	Results              []string           `json:"results"`
+	metav1.TypeMeta `json:",inline"`
+	api.ObjectMeta  `json:"metadata,omitempty"`
+	Spec            Spec               `json:"spec"`
+	Status          string             `json:"status"`
+	Err             string             `json:"error"`
+	Maps            map[int]MapTask    `json:"maps"`
+	Reduces         map[int]ReduceTask `json:"reduces"`
+	Results         []string           `json:"results"`
 }
 
 //GetJobArgs returns job arguments

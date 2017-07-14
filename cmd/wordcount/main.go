@@ -13,8 +13,8 @@ import (
 	"strconv"
 	"strings"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/onrik/logrus/filename"
+	log "github.com/sirupsen/logrus"
 	"github.com/turbobytes/kubemr/pkg/worker"
 )
 
