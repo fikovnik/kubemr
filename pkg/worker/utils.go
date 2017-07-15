@@ -42,7 +42,7 @@ func (utils *Utilities) UploadFilename(key, src string) (string, error) {
 
 //GetS3Object gets object from s3, errors if src is not fully qualified uri matching our bucket
 func (utils *Utilities) GetS3Object(src string) (io.ReadCloser, error) {
-	if !strings.HasPrefix(src, "s3://"+utils.bucket.Name+utils.prefix) {
+	if !strings.HasPrefix(src, "s3://"+utils.bucket.Name) {
 		return nil, fmt.Errorf("src is not kubemr managed s3 resource belonging to this job")
 	}
 	key := strings.Replace(src, "s3://"+utils.bucket.Name, "", 1)
