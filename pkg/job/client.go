@@ -92,7 +92,8 @@ func NewClient(k8sconfig *rest.Config, config *Config) (*Client, error) {
 	s := s3.New(auth, region)
 	cl.bucket = s.Bucket(config.BucketName)
 	//Silently ignoring the Put for now
-	cl.bucket.PutBucket("") //Ensure bucket exists
+	err = cl.bucket.PutBucket("") //Ensure bucket exists
+	log.Warn(err)
 	return cl, nil
 }
 
