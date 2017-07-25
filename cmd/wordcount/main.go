@@ -2,7 +2,6 @@ package main
 
 import (
 	"bufio"
-	"flag"
 	"fmt"
 	"hash/fnv"
 	"io"
@@ -16,11 +15,6 @@ import (
 	"github.com/onrik/logrus/filename"
 	log "github.com/sirupsen/logrus"
 	"github.com/turbobytes/kubemr/pkg/worker"
-)
-
-var (
-	kubeconfig = flag.String("kubeconfig", "", "path to kubeconfig, if absent then we use rest.InClusterConfig()")
-	apiserver  = flag.String("apiserver", "", "Url to apiserver, blank to read from kubeconfig")
 )
 
 type myWorker struct{}
@@ -38,7 +32,7 @@ func hash(s string, n int) int {
 //word1, 1
 //word2, 1
 //and so on...
-func (w myWorker) Map(id int, input string, args, secrets map[string]string, utils *worker.Utilities) (outputs map[int]string, err error) {
+func (w myWorker) Map(id int, input string, utils *worker.Utilities) (outputs map[int]string, err error) {
 	outputs = make(map[int]string)
 	log.Info("Running map on ", input)
 	//Create one TempFile for each partition
@@ -84,7 +78,7 @@ func (w myWorker) Map(id int, input string, args, secrets map[string]string, uti
 //word1, 102
 //word2, 55
 //and so on...
-func (w myWorker) Reduce(id int, inputs []string, args, secrets map[string]string, utils *worker.Utilities) (string, error) {
+func (w myWorker) Reduce(id int, inputs []string, utils *worker.Utilities) (string, error) {
 	f, err := ioutil.TempFile("", "")
 	//Store filename for future use
 	fname := f.Name()
@@ -161,15 +155,13 @@ func (w myWorker) Reduce(id int, inputs []string, args, secrets map[string]strin
 }
 
 func init() {
-	//Set this for testing purposes... in prod this would always be in-cluster
-	flag.Parse()
 	//log.SetFormatter(&log.JSONFormatter{})
 	filenameHook := filename.NewHook()
 	log.AddHook(filenameHook)
 }
 
 func main() {
-	runner, err := worker.NewRunner(*apiserver, *kubeconfig)
+	runner, err := worker.NewRunner()
 	if err != nil {
 		log.Error(err)
 		return //Silent fail

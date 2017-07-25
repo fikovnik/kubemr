@@ -22,3 +22,5 @@ import:
   subpackages:
   - aws
 - package: github.com/google/uuid
+- package: github.com/ventu-io/go-shortid
+  version: ~1.0.0
