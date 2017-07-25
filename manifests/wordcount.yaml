@@ -5,7 +5,7 @@ metadata:
 spec:
   containers:
   - name: kubemrworker
-    image: turbobytes/kubemr-wordcountexec:notpr
+    image: turbobytes/kubemr-wordcountexec
     imagePullPolicy: Always
     env:
       - name: KUBEMR_S3_REGION

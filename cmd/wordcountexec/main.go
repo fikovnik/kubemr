@@ -41,7 +41,7 @@ func main() {
         }],
         "containers": [{
           "name": "kubemrworker",
-          "image": "turbobytes/kubemr-wordcount:notpr",
+          "image": "turbobytes/kubemr-wordcount",
           "imagePullPolicy": "Always",
           "volumeMounts": [{
             "name": "tmpdir",
