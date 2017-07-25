@@ -1,7 +1,7 @@
 TAG=$(shell git rev-parse --short HEAD)
 BRANCH=$(shell git symbolic-ref --short -q HEAD)
 ifeq ("$(BRANCH)","master")
-	BRANCH="latest"
+	BRANCH=latest
 endif
 
 export CGO_ENABLED=0
