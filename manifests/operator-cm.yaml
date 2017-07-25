@@ -1,8 +1,0 @@
-kind: ConfigMap
-apiVersion: v1
-metadata:
-  name: kubemr-operator
-data:
-  s3_region: ap-southeast-1
-  s3_bucket: kubemr
-  s3_prefix: /kubemr

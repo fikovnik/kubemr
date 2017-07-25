@@ -1,29 +1,37 @@
 TAG=$(shell git rev-parse --short HEAD)
+BRANCH=$(shell git symbolic-ref --short -q HEAD)
+ifeq ("$(BRANCH)","master")
+	BRANCH="latest"
+endif
+
 export CGO_ENABLED=0
 
-all: operator wordcount
+all: wordcount wordcountexec
 
-operator:
-	go build -o cmd/operator/bin/operator cmd/operator/main.go
-	cp /etc/ssl/certs/ca-certificates.crt cmd/operator/bin/ #Because otherwise x509 wont work in scratch image
-	docker build -t $(PREFIX)kubemr-operator cmd/operator/
-ifneq ("$(PREFIX)","")
-	docker push $(PREFIX)kubemr-operator:latest
-	docker tag $(PREFIX)kubemr-operator $(PREFIX)kubemr-operator:$(TAG)
-	docker push $(PREFIX)kubemr-operator:$(TAG)
-endif
+
 
 wordcount:
 	go build -o cmd/wordcount/bin/wordcount cmd/wordcount/main.go
 	docker build -t $(PREFIX)kubemr-wordcount cmd/wordcount/
 ifneq ("$(PREFIX)","")
-	docker push $(PREFIX)kubemr-wordcount:latest
+	docker tag $(PREFIX)kubemr-wordcount $(PREFIX)kubemr-wordcount:$(BRANCH)
+	docker push $(PREFIX)kubemr-wordcount:$(BRANCH)
 	docker tag $(PREFIX)kubemr-wordcount $(PREFIX)kubemr-wordcount:$(TAG)
 	docker push $(PREFIX)kubemr-wordcount:$(TAG)
 endif
 
+wordcountexec:
+	go build -o cmd/wordcountexec/bin/wordcountexec cmd/wordcountexec/main.go
+	docker build -t $(PREFIX)kubemr-wordcountexec cmd/wordcountexec/
+ifneq ("$(PREFIX)","")
+	docker tag $(PREFIX)kubemr-wordcountexec $(PREFIX)kubemr-wordcountexec:$(BRANCH)
+	docker push $(PREFIX)kubemr-wordcountexec:$(BRANCH)
+	docker tag $(PREFIX)kubemr-wordcountexec:$(BRANCH) $(PREFIX)kubemr-wordcountexec:$(TAG)
+	docker push $(PREFIX)kubemr-wordcountexec:$(TAG)
+endif
+
+
 test:
-	go test -cover github.com/turbobytes/kubemr/pkg/jsonpatch
 	go test -cover github.com/turbobytes/kubemr/pkg/worker
 	go test -cover github.com/turbobytes/kubemr/pkg/job
 	go test -cover github.com/turbobytes/kubemr/pkg/k8s

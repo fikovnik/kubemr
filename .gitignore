@@ -24,6 +24,5 @@ _testmain.go
 *.prof
 
 vendor
-cmd/operator/bin
-cmd/apiserver/bin
+cmd/wordcountexec/bin
 cmd/wordcount/bin

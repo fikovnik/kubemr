@@ -1,23 +1,21 @@
-apiVersion: "turbobytes.com/v1alpha1"
-kind: MapReduceJob
+apiVersion: v1
+kind: Pod
 metadata:
-  #name: validobj1
-  generateName: test-
+  name: wordcount
 spec:
-  image: turbobytes/kubemr-wordcount
-  replicas: 10
-  inputs:
-  - https://tools.ietf.org/rfc/rfc4501.txt
-  - https://tools.ietf.org/rfc/rfc2017.txt
-  - https://tools.ietf.org/rfc/rfc2425.txt
-  template:
-    spec:
-      volumes:
-      - name: tmpdir
-        emptyDir: {}
-      containers:
-      - name: kubemrworker
-        image: turbobytes/kubemr-wordcount
-        volumeMounts:
-        - name: tmpdir
-          mountPath: /tmp
+  containers:
+  - name: kubemrworker
+    image: turbobytes/kubemr-wordcountexec
+    imagePullPolicy: Always
+    env:
+      - name: KUBEMR_S3_REGION
+        value: ap-southeast-1
+      - name: KUBEMR_S3_BUCKET_NAME
+        value: kubemr
+      - name: KUBEMR_S3_BUCKET_PREFIX
+        value: test/
+      - name: MY_POD_IP
+        valueFrom:
+          fieldRef:
+            fieldPath: status.podIP
+  restartPolicy: Never
