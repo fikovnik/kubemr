@@ -69,7 +69,7 @@ func NewRunner() (*Runner, error) {
 	//Ensure bucket exists
 	bucket := s.Bucket(os.Getenv("KUBEMR_S3_BUCKET_NAME"))
 	//TODO: Check before attempting put. Maybe this should be done elsewhere
-	//bucket.PutBucket("")
+	bucket.PutBucket("")
 	r.utils = NewUtilities(bucket, cfg.BucketPrefix)
 	//TODO
 	return r, nil

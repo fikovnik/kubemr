@@ -85,7 +85,7 @@ func (jb *MapReduceJob) Init(cl kubernetes.Interface, addr, myip string, cfg *Co
 	if jb.Namespace == "" {
 		jb.Namespace = "default"
 	}
-	jb.poke = make(chan bool)
+	jb.poke = make(chan bool, 10) //Creating some buffer otherwise unlock defer doesnt work when channel is full
 	jb.addr = addr
 	//Populate the config
 	cfg.JobURL = fmt.Sprintf("http://%s%s/%s/", myip, addr, jb.Name)
