@@ -80,7 +80,7 @@ func TestMRJobFlowOK(t *testing.T) {
 	go func() {
 		//TODO: Need better way than stupid sleep...
 		time.Sleep(time.Millisecond * 30)
-		baseurl := fmt.Sprintf("http://127.0.0.1%s/%s/", addr, jb.Name)
+		baseurl := fmt.Sprintf("http://127.0.0.1%s/%s/%s/", addr, jb.Name, jb.uuid)
 		t.Log(baseurl)
 		if gethttp(http.MethodGet, baseurl, "", t) != 200 {
 			errch <- fmt.Errorf("%s returned status not 200", baseurl)
