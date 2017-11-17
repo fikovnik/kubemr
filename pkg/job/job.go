@@ -193,17 +193,19 @@ func (jb *MapReduceJob) cleanup() error {
 			return err
 		}
 		//hunt for lingering pods...
-		pods, err := jb.cl.CoreV1().Pods(jb.Namespace).List(metav1.ListOptions{LabelSelector: "job-name=" + jb.jobname})
-		if err != nil {
-			return err
-		}
-		for _, pod := range pods.Items {
-			err = jb.cl.CoreV1().Pods(jb.Namespace).Delete(pod.Name, &metav1.DeleteOptions{})
+		/*
+			pods, err := jb.cl.CoreV1().Pods(jb.Namespace).List(metav1.ListOptions{LabelSelector: "job-name=" + jb.jobname})
 			if err != nil {
 				return err
 			}
-		}
-		jb.jobname = ""
+			for _, pod := range pods.Items {
+				err = jb.cl.CoreV1().Pods(jb.Namespace).Delete(pod.Name, &metav1.DeleteOptions{})
+				if err != nil {
+					return err
+				}
+			}
+			jb.jobname = ""
+		*/
 	}
 	return nil
 }
