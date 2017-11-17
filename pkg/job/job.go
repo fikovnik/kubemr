@@ -130,14 +130,36 @@ func (jb *MapReduceJob) deployk8() error {
 			Template: podspec,
 		},
 	}
-	//Deploy the job...
-	j, err := jb.cl.BatchV1().Jobs(jobspec.Namespace).Create(&jobspec)
-	if err != nil {
-		return err
+	//jb.jobname = jb.Name + "-" + jb.uuid
+	jb.jobname = strings.ToLower(jb.Name)
+	pod := &v1.Pod{
+		ObjectMeta: metav1.ObjectMeta{
+			GenerateName: jb.jobname + "-",
+			Namespace:    jobspec.Namespace,
+			Labels: map[string]string{
+				"job-name": jb.jobname,
+			},
+		},
+		Spec: jobspec.Spec.Template.Spec,
 	}
-	jb.jobname = j.Name
-	log.Infof("Created job: %s", j.Name)
-	return err
+	pod.Spec.RestartPolicy = v1.RestartPolicyNever
+	for i := 0; i < int(*jb.Replicas); i++ {
+		p, err := jb.cl.CoreV1().Pods(jobspec.Namespace).Create(pod)
+		if err != nil {
+			return err
+		}
+		log.Infof("Created job: %s", p.Name)
+	}
+	//Deploy the job...
+	/*
+		j, err := jb.cl.BatchV1().Jobs(jobspec.Namespace).Create(&jobspec)
+		if err != nil {
+			return err
+		}
+		jb.jobname = j.Name
+		log.Infof("Created job: %s", j.Name)
+	*/
+	return nil
 }
 
 //Start deploys the job and starts the server
@@ -187,25 +209,27 @@ func (jb *MapReduceJob) cleanup() error {
 	//Delete the batch job in k8s
 	if jb.jobname != "" {
 		log.Info("Deleting batch job")
-		policy := metav1.DeletePropagationForeground
-		err := jb.cl.BatchV1().Jobs(jb.Namespace).Delete(jb.jobname, &metav1.DeleteOptions{PropagationPolicy: &policy})
-		if err != nil {
-			return err
-		}
-		//hunt for lingering pods...
 		/*
-			pods, err := jb.cl.CoreV1().Pods(jb.Namespace).List(metav1.ListOptions{LabelSelector: "job-name=" + jb.jobname})
+			policy := metav1.DeletePropagationForeground
+			err := jb.cl.BatchV1().Jobs(jb.Namespace).Delete(jb.jobname, &metav1.DeleteOptions{PropagationPolicy: &policy})
 			if err != nil {
 				return err
 			}
-			for _, pod := range pods.Items {
-				err = jb.cl.CoreV1().Pods(jb.Namespace).Delete(pod.Name, &metav1.DeleteOptions{})
-				if err != nil {
-					return err
-				}
-			}
-			jb.jobname = ""
 		*/
+		//hunt for lingering pods...
+
+		pods, err := jb.cl.CoreV1().Pods(jb.Namespace).List(metav1.ListOptions{LabelSelector: "job-name=" + jb.jobname})
+		if err != nil {
+			return err
+		}
+		for _, pod := range pods.Items {
+			err = jb.cl.CoreV1().Pods(jb.Namespace).Delete(pod.Name, &metav1.DeleteOptions{})
+			if err != nil {
+				return err
+			}
+		}
+		jb.jobname = ""
+
 	}
 	return nil
 }
