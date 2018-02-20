@@ -11,10 +11,10 @@ import (
 	"github.com/nbari/violetear"
 	log "github.com/sirupsen/logrus"
 	shortid "github.com/ventu-io/go-shortid"
+	batchv1 "k8s.io/api/batch/v1"
+	"k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/pkg/api/v1"
-	batchv1 "k8s.io/client-go/pkg/apis/batch/v1"
 )
 
 var (

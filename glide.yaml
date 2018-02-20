@@ -4,20 +4,11 @@ import:
 - package: github.com/onrik/logrus
   subpackages:
   - filename
-- package: k8s.io/apimachinery
-  subpackages:
-  - pkg/apis/meta/v1
-  - pkg/runtime/schema
-  - pkg/runtime/serializer
-  - pkg/types
 - package: k8s.io/client-go
-  version: v3.0.0-beta.0
+  version: v6.0.0
   subpackages:
   - kubernetes
-  - pkg/api/v1
-  - pkg/apis/extensions/v1beta1
   - rest
-  - pkg/api
 - package: gopkg.in/amz.v1
   subpackages:
   - aws

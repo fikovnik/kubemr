@@ -1,6 +1,6 @@
 package job
 
-import "k8s.io/client-go/pkg/api/v1"
+import "k8s.io/api/core/v1"
 
 func stampCommonEnv(cfg *Config) []v1.EnvVar {
 	return []v1.EnvVar{
